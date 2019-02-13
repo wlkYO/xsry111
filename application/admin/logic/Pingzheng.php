@@ -167,6 +167,7 @@ class Pingzheng
                 array_push($result, $temp);
             }
         } elseif ($arr['xmlb'] == '资产类现金支出') {
+
             $temp = array();
             $temp = $temp1;
             $temp['zongzhang_kemu'] = ($arr['yijimx_name'] == '经营费用')?'营业费用':'其他业务支出';//总账科目
@@ -194,15 +195,15 @@ class Pingzheng
     }
 
 
-    public function searchProduct($sdate,$edate)
+    public function searchProduct($token,$sdate,$edate)
     {
         $modelPz = Loader::model('Pingzheng','model');
-        $res = $modelPz->searchProduct($sdate,$edate,$url='');
+        $res = $modelPz->searchProduct($token,$sdate,$edate,$url='');
         return $res;
     }
-    public function createPingZheng($sdate,$edate){
+    public function createPingZheng($token,$sdate,$edate){
         $modelPz = Loader::model('Pingzheng','model');
-        $res = $modelPz->createPingZheng($sdate,$edate);
+        $res = $modelPz->createPingZheng($token,$sdate,$edate);
         if(!empty($res)){
             return retmsg(0);
         }

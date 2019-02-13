@@ -81,19 +81,20 @@ class Pingzheng
      * @param int $type    0: 无效    1:有效
      * @return mixed
      */
-    public function createPingZheng($sdate='', $edate='',$type =1){
+    public function createPingZheng($token,$sdate='', $edate='',$type =1){
         $sdate = empty($sdate)?date('Y-m-01',time()):$sdate;
         $edate = empty($edate)?date('Y-m-d',time()):$edate;
+
         if($type == 0){
             $invalidModel = Loader::model('Pingzheng','model');
-            $res = $invalidModel->createInvalidPz($sdate, $edate,$type);
+            $res = $invalidModel->createInvalidPz($token,$sdate, $edate,$type);
             if(!empty($res)){
                 return retmsg(0);
             }
             return retmsg(-1);
         }
         $logicPz  = Loader::model('Pingzheng','logic');
-        $res = $logicPz->createPingZheng($sdate,$edate);
+        $res = $logicPz->createPingZheng($token,$sdate,$edate);
         return $res;
     }
 
@@ -104,12 +105,13 @@ class Pingzheng
      * @param string $depts
      * @return mixed
      */
-    public function searchProduct($sdate='', $edate='')
+    public function searchProduct($token,$sdate='', $edate='')
     {
+
         $sdate = empty($sdate)?date('Y-m-01',time()):$sdate;
         $edate = empty($edate)?date('Y-m-d',time()):$edate;
         $logicPz = Loader::model('Pingzheng','logic');
-        $res = $logicPz->searchProduct($sdate,$edate);
+        $res = $logicPz->searchProduct($token,$sdate,$edate);
         return $res;
     }
 
