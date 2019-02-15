@@ -73,7 +73,7 @@ class Pingzheng
     }
 
 
-    //--------------------------商品类商品凭证start------------------------------
+    //------------------------数码--商品类商品凭证start------------------------------
 
     /**
      * @param string $sdate
@@ -117,4 +117,21 @@ class Pingzheng
 
     //--------------------------商品类商品凭证end------------------------------
 
+    //---------------------商品类-------门和门配 凭证-------------------------
+    public function doorPingZheng($token,$sdate='', $edate='',$type =1){
+        $sdate = empty($sdate)?date('Y-m-01',time()):$sdate;
+        $edate = empty($edate)?date('Y-m-d',time()):$edate;
+        if($type == 0){
+            $invalidLogic = Loader::model('Pingzheng','logic');
+            $res = $invalidLogic->doorInvalidPz($token,$sdate, $edate);
+            if(!empty($res)){
+                return retmsg(0);
+            }
+            return retmsg(-1);
+        }
+        $logicPz  = Loader::model('Pingzheng','logic');
+        $res = $logicPz->doorPingZheng($token,$sdate,$edate);
+        return $res;
+    }
+    //------------------------商品类-----门和门配 凭证-end----------------------
 }

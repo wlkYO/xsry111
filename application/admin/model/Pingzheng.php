@@ -5,6 +5,7 @@
  * Date: 2019/1/16
  * Time: 19:35
  */
+
 namespace app\admin\model;
 
 use think\Db;
@@ -81,7 +82,7 @@ WHERE
                     $xmlb = '损益类现金支出';
                 }
                 # 根据项目类别和一级明细及二级明细为空查询到的数据，给二级明细重置为空数据
-                $xmData = $this->getCashXmid($xmlb, $xm_yjmx,'');
+                $xmData = $this->getCashXmid($xmlb, $xm_yjmx, '');
                 if (!empty($xmData)) {
                     # 重置二级明细为空
                     $ret[$key]['erjimx_name'] = '';
@@ -89,20 +90,20 @@ WHERE
                 $ret[$key]['xmlb'] = $xmlb;
             }
         }
-        return empty($ret)?[]:$ret;
+        return empty($ret) ? [] : $ret;
     }
 
     /**
      * 获取现金账项目类别一二级明细及其对应的总账科目关系
      */
-    public function getCashXmid($xmlb,$xm_yjmx,$xm_ejmx)
+    public function getCashXmid($xmlb, $xm_yjmx, $xm_ejmx)
     {
         $sql = "select id as xm_id from certificate_cash_xm where xmlb='$xmlb' and xm_yjmx='$xm_yjmx' and xm_ejmx='$xm_ejmx'";
         $sql = "select a.id as xm_id,a.xmlb,a.xm_yjmx,a.xm_ejmx,b.id as relation_id,c.subject_code,c.subject_name
  from certificate_cash_xm a,certificate_relation b,certificate_subject c 
 where a.id=b.xm_id and c.subject_code=b.subject_code and a.xmlb='$xmlb' and a.xm_yjmx='$xm_yjmx' and a.xm_ejmx='$xm_ejmx'";
         $ret = Db::query($sql);
-        return empty($ret)?[]:$ret[0];
+        return empty($ret) ? [] : $ret[0];
     }
 
     public function getSubjectCode($xm_id, $type)
@@ -117,7 +118,7 @@ where a.id=b.xm_id and c.subject_code=b.subject_code and a.xmlb='$xmlb' and a.xm
 //        $sql = "select id,dname from xsrb_department where id=(select pid as id from xsrb_department where id=$dept_id)";
         $sql = "select dept_second as dname from certificate_dept where `year`='$year' and `month`='$month' and dept_third='$dname'";
         $ret = Db::query($sql);
-        return empty($ret)?'':$ret[0]['dname'];
+        return empty($ret) ? '' : $ret[0]['dname'];
     }
 
     public function insertPingzheng($data)
@@ -148,180 +149,190 @@ and yiji_kemu='$yiji_kemu' and erji_kemu='$erji_kemu' and yewu_type='$yewu_type'
     }
 
     // --------------------------------商品类凭证 start-----------------------------------------
-    public function createPingZheng($token,$sdate,$edate){
-        $c_data = Loader::model('Pingzheng','controller');
-        $arr_data = $c_data->searchProduct($token,$sdate, $edate);
-        $data = $this->reCombineData($arr_data,1);
-        if(!empty($data)){
-            foreach ($data as   $key => $value ){
-                foreach ($data[$key] as $k => $v){
-                    $sunyi_value =['调价升值' => '升值',
+    public function createPingZheng($token, $sdate, $edate)
+    {
+
+        $c_data = Loader::model('Pingzheng', 'controller');
+        $arr_data = $c_data->searchProduct($token, $sdate, $edate);
+
+        $data = $this->reCombineData($arr_data, 1);
+
+        if (!empty($data)) {
+            foreach ($data as $key => $value) {
+                foreach ($data[$key] as $k => $v) {
+                    $sunyi_value = ['调价升值' => '升值',
                         '盘点升溢' => '盘盈',
                         '调价降值' => '降值',
                         '盘点短缺' => '盘亏',
-                        '其他业务支出' =>'换货支出'
-                        ];
+                        '其他业务支出' => '换货支出'
+                    ];
 
                     $xm_id = Db::table('certificate_product_xm')
-                        ->where('xmlb',$data[$key][$k]['xmlb'])
-                        ->where('xm_fenlei',$data[$key][$k]['yijimx_name'])
+                        ->where('xmlb', $data[$key][$k]['xmlb'])
+                        ->where('xm_fenlei', $data[$key][$k]['yijimx_name'])
                         ->value('id');
 
                     $sub_code = Db::table('certificate_relation')
-                        ->where('xm_id',$xm_id)
-                        ->where('type',2)
-                        ->where('product_type',1)
+                        ->where('xm_id', $xm_id)
+                        ->where('type', 2)
+                        ->where('product_type', 1)
                         ->value('subject_code');
                     //处理错误信息
-                    if(empty($sub_code)){
-                        $this->handleErrPz($data[$key][$k],1);
-                    } else {   //  处理产生凭证
-                        $sub_name = Db::table('certificate_subject')
-                            ->where('subject_code',$sub_code)
-                            ->value('subject_name');
+                    if (empty($sub_code)) {
+                        $this->handleErrPz($data[$key][$k], 1);
+                        continue;
+                    }
+                    $sub_name = Db::table('certificate_subject')
+                        ->where('subject_code', $sub_code)
+                        ->value('subject_name');
 
-                        $yijikemu = Db::table('certificate_dept')
-                            ->where('dept_third',$data[$key][$k]['banshichu'])
-                            ->value('dept_second');
-                        $dept_id = Db::table('xsrb_department')
-                            ->field('id')
-                            ->where('dname',$data[$key][$k]['dept_name'])
-                            ->value('id');
+                    //处理多个办事处调入调出
+                    if (is_array($data[$key][$k]['banshichu'])) {
+                        $this->handleBanShiChu($data[$key][$k], $edate, $key, 1);
+                        continue;
+                    }
+                    $yijikemu = Db::table('certificate_dept')
+                        ->where('dept_third', $data[$key][$k]['banshichu'])
+                        ->value('dept_second');
+                    $dept_id = Db::table('xsrb_department')
+                        ->field('id')
+                        ->where('dname', $data[$key][$k]['dept_name'])
+                        ->value('id');
 
-                        //组合数据
-                        if($key == 0){
-                            $zhaiyao = [
-                                '内部往来'=>'其他部门调入',
-                                '待处理财产损益'=>'有效商品'.$sunyi_value[$data[$key][$k]['yijimx_name']],
-                                '发出商品' =>  '本月送货支出',
-                                '管理费用' =>  '本月商品报废支出',
-                                '库存商品(有效)' =>  '',
-                                '库存商品(暂借)' =>'给客户铺货商品',
-                                '其他业务支出' =>'商品换货收支',
-                                '应付账款' =>'外购商品入库',
-                                '暂借商品' =>'收客户暂存商品',
-                                '主营业务成本' =>'销售成本',
-                                '其他业务支出' =>'商品换货收支',
-                                '管理费用' => '本月报废商品支出',
-                            ];
+                    //组合数据
+                    if ($key == 0) {
+                        $zhaiyao = [
+                            '内部往来' => '其他部门调入',
+                            '待处理财产损益' => '有效商品' . $sunyi_value[$data[$key][$k]['yijimx_name']],
+                            '发出商品' => '本月送货支出',
+                            '管理费用' => '本月商品报废支出',
+                            '库存商品(有效)' => '',
+                            '库存商品(暂借)' => '给客户铺货商品',
+                            '其他业务支出' => '商品换货收支',
+                            '应付账款' => '外购商品入库',
+                            '暂借商品' => '收客户暂存商品',
+                            '主营业务成本' => '销售成本',
+                            '其他业务支出' => '商品换货收支',
+                            '管理费用' => '本月报废商品支出',
+                        ];
 
-                            $save_data_1 =[
-                                "dept_id" =>$dept_id,
-                                "dname" =>$data[$key][$k]['dept_name'],
-                                "type" => 2,
-                                "date" => $edate ,
-                                "zongzhang_kemu" => '库存商品有效',
-                                "yiji_kemu" =>'',
-                                "erji_kemu" =>'',
-                                "qichu_yue"=>0,
-                                "qimo_yue" =>0,
-                                "jiefang" =>$data[$key][$k]['income'],
-                                "daifang" =>0,
-                                "zhaiyao"  =>$zhaiyao[$sub_name],
-                                "yewu_type" =>'数码',
-                                "create_by" =>'系统',
-                                "create_time" =>date('Y-m-d H:i:s')
-                            ];
+                        $save_data_1 = [
+                            "dept_id" => $dept_id,
+                            "dname" => $data[$key][$k]['dept_name'],
+                            "type" => 2,
+                            "date" => $edate,
+                            "zongzhang_kemu" => '库存商品有效',
+                            "yiji_kemu" => '',
+                            "erji_kemu" => '',
+                            "qichu_yue" => 0,
+                            "qimo_yue" => 0,
+                            "jiefang" => $data[$key][$k]['income'],
+                            "daifang" => 0,
+                            "zhaiyao" => $zhaiyao[$sub_name],
+                            "yewu_type" => '数码',
+                            "create_by" => '系统',
+                            "create_time" => date('Y-m-d H:i:s')
+                        ];
 
-                            $save_data_2 =[
-                                "dept_id" =>$dept_id,
-                                "dname" =>$data[$key][$k]['dept_name'],
-                                "type" => 2,
-                                "date" => $edate ,
-                                "zongzhang_kemu" => $sub_name,
-                                "yiji_kemu" =>$yijikemu,
-                                "erji_kemu" =>$data[$key][$k]['banshichu'],
-                                "jiefang" => 0,
-                                "daifang" =>$data[$key][$k]['income'],
-                                "qichu_yue"=>0,
-                                "qimo_yue" =>0,
-                                "zhaiyao"  =>$zhaiyao[$sub_name] ,
-                                "yewu_type" =>'数码',
-                                "create_by" =>'系统',
-                                "create_time" =>date('Y-m-d H:i:s')
-                            ];
-                            //处理科目代码大于4位
-                            if(strlen($sub_code)>4){
-                                $sub_code_has = substr($sub_code,0,4);
-                                $sub_name_has = Db::table('certificate_subject')
-                                    ->where('subject_code',$sub_code_has)
-                                    ->value('subject_name');
-                                $save_data_2["zongzhang_kemu"] = $sub_name_has;
-                                $save_data_2["yiji_kemu"] =$sub_name;
-                                $save_data_1['zhaiyao'] =$zhaiyao[$sub_name_has];
-                                $save_data_2['zhaiyao'] =$zhaiyao[$sub_name_has];
-                            }
-                        } else {  //处理商品支出
-                            $zhaiyao = [
-                                '内部往来'=>'商品调出',
-                                '待处理财产损益'=>'有效商品'.$sunyi_value[$data[$key][$k]['yijimx_name']],
-                                '发出商品' =>  '本月送货支出',
-                                '管理费用' =>  '本月商品报废支出',
-                                '库存商品(有效)' =>  '',
-                                '库存商品(暂借)' =>'给客户铺货商品',
-                                '其他业务支出' =>'商品换货收支',
-                                '应付账款' =>'外购商品出库',
-                                '暂借商品' =>'支客户暂存商品',
-                                '主营业务成本' =>'销售成本',
-                            ];
-                            $save_data_1 =[
-                                "dept_id" =>$dept_id,
-                                "dname" =>$data[$key][$k]['dept_name'],
-                                "type" => 2,
-                                "date" => $edate ,
-                                "zongzhang_kemu" => '库存商品有效',
-                                "yiji_kemu" =>'',
-                                "erji_kemu" =>'',
-                                "qichu_yue"=>0,
-                                "qimo_yue" =>0,
-                                "jiefang" =>$data[$key][$k]['outcome'],
-                                "daifang" =>0,
-                                "zhaiyao"  =>$zhaiyao[$sub_name],
-                                "yewu_type" =>'数码',
-                                "create_by" =>'系统',
-                                "create_time" =>date('Y-m-d H:i:s')
-                            ];
-                            $save_data_2 =[
-                                "dept_id" =>$dept_id,
-                                "dname" =>$data[$key][$k]['dept_name'],
-                                "type" => 2,
-                                "date" => $edate ,
-                                "zongzhang_kemu" => $sub_name,
-                                "yiji_kemu" =>$yijikemu,
-                                "erji_kemu" =>$data[$key][$k]['banshichu'],
-                                "jiefang" => 0,
-                                "daifang" =>$data[$key][$k]['outcome'],
-                                "qichu_yue"=>0,
-                                "qimo_yue" =>0,
-                                "zhaiyao"  =>$zhaiyao[$sub_name],
-                                "yewu_type" =>'数码',
-                                "create_by" =>'系统',
-                                "create_time" =>date('Y-m-d H:i:s')
-                            ];
+                        $save_data_2 = [
+                            "dept_id" => $dept_id,
+                            "dname" => $data[$key][$k]['dept_name'],
+                            "type" => 2,
+                            "date" => $edate,
+                            "zongzhang_kemu" => $sub_name,
+                            "yiji_kemu" => $yijikemu,
+                            "erji_kemu" => $data[$key][$k]['banshichu'],
+                            "jiefang" => 0,
+                            "daifang" => $data[$key][$k]['income'],
+                            "qichu_yue" => 0,
+                            "qimo_yue" => 0,
+                            "zhaiyao" => $zhaiyao[$sub_name],
+                            "yewu_type" => '数码',
+                            "create_by" => '系统',
+                            "create_time" => date('Y-m-d H:i:s')
+                        ];
+                        //处理科目代码大于4位
+                        if (strlen($sub_code) > 4) {
+                            $sub_code_has = substr($sub_code, 0, 4);
+                            $sub_name_has = Db::table('certificate_subject')
+                                ->where('subject_code', $sub_code_has)
+                                ->value('subject_name');
 
-                            //处理科目代码大于4位
-                            if(strlen($sub_code)>4){
-                                $sub_code_has = substr($sub_code,0,4);
-                                $sub_name_has = Db::table('certificate_subject')
-                                    ->where('subject_code',$sub_code_has)
-                                    ->value('subject_name');
-                                $save_data_2["zongzhang_kemu"] = $sub_name_has;
-                                $save_data_2["yiji_kemu"] =$sub_name;
-                                $save_data_1['zhaiyao'] =$zhaiyao[$sub_name_has];
-                                $save_data_2['zhaiyao'] =$zhaiyao[$sub_name_has];
-
-                            }
+                            $save_data_2["zongzhang_kemu"] = $sub_name_has;
+                            $save_data_2["yiji_kemu"] = $sub_name;
+                            $save_data_1['zhaiyao'] = $zhaiyao[$sub_name_has];
+                            $save_data_2['zhaiyao'] = $zhaiyao[$sub_name_has];
                         }
-                        Db::table('certificate_list')
-                            ->insert($save_data_1);
-                        Db::table('certificate_list')
-                            ->insert($save_data_2);
+                    } else {  //处理商品支出
+                        $zhaiyao = [
+                            '内部往来' => '商品调出',
+                            '待处理财产损益' => '有效商品' . $sunyi_value[$data[$key][$k]['yijimx_name']],
+                            '发出商品' => '本月送货支出',
+                            '管理费用' => '本月商品报废支出',
+                            '库存商品(有效)' => '',
+                            '库存商品(暂借)' => '给客户铺货商品',
+                            '其他业务支出' => '商品换货收支',
+                            '应付账款' => '外购商品出库',
+                            '暂借商品' => '支客户暂存商品',
+                            '主营业务成本' => '销售成本',
+                        ];
+                        $save_data_1 = [
+                            "dept_id" => $dept_id,
+                            "dname" => $data[$key][$k]['dept_name'],
+                            "type" => 2,
+                            "date" => $edate,
+                            "zongzhang_kemu" => '库存商品有效',
+                            "yiji_kemu" => '',
+                            "erji_kemu" => '',
+                            "qichu_yue" => 0,
+                            "qimo_yue" => 0,
+                            "jiefang" => $data[$key][$k]['outcome'],
+                            "daifang" => 0,
+                            "zhaiyao" => $zhaiyao[$sub_name],
+                            "yewu_type" => '数码',
+                            "create_by" => '系统',
+                            "create_time" => date('Y-m-d H:i:s')
+                        ];
+                        $save_data_2 = [
+                            "dept_id" => $dept_id,
+                            "dname" => $data[$key][$k]['dept_name'],
+                            "type" => 2,
+                            "date" => $edate,
+                            "zongzhang_kemu" => $sub_name,
+                            "yiji_kemu" => $yijikemu,
+                            "erji_kemu" => $data[$key][$k]['banshichu'],
+                            "jiefang" => 0,
+                            "daifang" => $data[$key][$k]['outcome'],
+                            "qichu_yue" => 0,
+                            "qimo_yue" => 0,
+                            "zhaiyao" => $zhaiyao[$sub_name],
+                            "yewu_type" => '数码',
+                            "create_by" => '系统',
+                            "create_time" => date('Y-m-d H:i:s')
+                        ];
+
+                        //处理科目代码大于4位
+                        if (strlen($sub_code) > 4) {
+                            $sub_code_has = substr($sub_code, 0, 4);
+                            $sub_name_has = Db::table('certificate_subject')
+                                ->where('subject_code', $sub_code_has)
+                                ->value('subject_name');
+                            $save_data_2["zongzhang_kemu"] = $sub_name_has;
+                            $save_data_2["yiji_kemu"] = $sub_name;
+                            $save_data_1['zhaiyao'] = $zhaiyao[$sub_name_has];
+                            $save_data_2['zhaiyao'] = $zhaiyao[$sub_name_has];
+
+                        }
                     }
-                    }
+                    Db::table('certificate_list')
+                        ->insert($save_data_1);
+                    Db::table('certificate_list')
+                        ->insert($save_data_2);
+                }
             }
             return 1;
         }
-       return '';
+        return '';
     }
 
     /**
@@ -330,96 +341,125 @@ and yiji_kemu='$yiji_kemu' and erji_kemu='$erji_kemu' and yewu_type='$yewu_type'
      * @param $edate
      * @param string $depts
      */
-    public function searchProduct($token,$sdate,$edate,$url='')
+    public function searchProduct($token, $sdate, $edate, $url = '')
     {
-        $url = empty($url)?"http://xsrb.wsy.me:801/saleStockSystem/index.php/qt/SPZDZD/search/type/1/token/$token/sdate/$sdate/edate/$edate":$url;
 
-        $data = json_decode(curl_get($url,10),true);
+        $url = empty($url) ? "http://xsrb.wsy.me:801/saleStockSystem/index.php/qt/SPZDZD/search/type/1/token/$token/sdate/$sdate/edate/$edate" : $url;
+        $data = json_decode(curl_get($url, 10), true);
         $list = $data['data'];
         $head_name = $data['header'][0]['children'][0]['headerName'];
-        $head_name = substr($head_name,strpos($head_name,":")+1);
+        $head_name = substr($head_name, strpos($head_name, ":") + 1);
         $in_items = [];
         $out_items = [];
-        for($i=0;   $i<count($list);    $i++){
-            foreach ($list[$i] as $key=>$value){
-                if($key == "initem" || $key == "inmoney"){
-                   $in_items[$i] = [
-                       "dept_name" => $head_name,
-                        "initem"=>$list[$i]["initem"],
-                        "inmoney"=>$list[$i]["inmoney"]
-                       ];
-                }elseif ($key == "outitem" || $key == "outmoney"){
-                    $out_items[$i] =[
+        for ($i = 0; $i < count($list); $i++) {
+            foreach ($list[$i] as $key => $value) {
+                if ($key == "initem" || $key == "inmoney") {
+                    $in_items[$i] = [
                         "dept_name" => $head_name,
-                        "outitem" =>$list[$i]["outitem"],
-                        "outmoney" =>$list[$i]["outmoney"]
+                        "initem" => $list[$i]["initem"],
+                        "inmoney" => $list[$i]["inmoney"]
+                    ];
+                } elseif ($key == "outitem" || $key == "outmoney") {
+                    $out_items[$i] = [
+                        "dept_name" => $head_name,
+                        "outitem" => $list[$i]["outitem"],
+                        "outmoney" => $list[$i]["outmoney"]
                     ];
                 }
             }
         }
-        $handleData = [$in_items,$out_items];
+        $handleData = [$in_items, $out_items];
         return $handleData;
 
     }
 
-    public function reCombineData($data,$type)
+    public function reCombineData($data, $type)
     {
-        $xmlb = ($type==1)?'有效商品收入':'无效商品收入';
-        $xmlb_zc = ($type==1)?'有效商品支出':'无效商品支出';
+        $xmlb = ($type == 1) ? '有效商品收入' : '无效商品收入';
+        $xmlb_zc = ($type == 1) ? '有效商品支出' : '无效商品支出';
         $yewu_type = '数码';
         //用于存放商品收入或支出
         $result1 = array();
         $shangping_data = $data[0];
 
-        $banshichu_1 = '';
+        $banshichu_1 = [];
         $banshichu_2 = [];
 
-        foreach ($data[0] as $key=>$value){
-          $has = Db::table('certificate_dept')->where('dept_third',$value['initem'])->find();
-             if(!empty($has)){
-                 $banshichu_1 = $value['initem'];
-             }
-      }
-        foreach ($data[1] as $key=>$value){
-            $has = Db::table('certificate_dept')->where('dept_third',$value['initem'])->find();
-            if(!empty($has)){
-                $banshichu_2 = $value['initem'];
+//        foreach ($data[0] as $key => $value) {
+//            $has = Db::table('certificate_dept')->where('dept_third', $value['initem'])->find();
+//            if (!empty($has)) {
+//                $banshichu_1 = $value['initem'];
+//            }
+//        }
+//        foreach ($data[1] as $key => $value) {
+//            $has = Db::table('certificate_dept')->where('dept_third', $value['initem'])->find();
+//            if (!empty($has)) {
+//                $banshichu_2 = $value['initem'];
+//            }
+//        }
+        $index1 = 0;
+        $index2 = 0;
+        foreach ($data[0] as $key => $value) {
+            if ($data[0][$key]['initem'] == '送货收回') {
+                $index1 = $key;
             }
         }
-        $xm_fenlei = $this->getProjectFenlei($xmlb,$type);//项目的具体分类
-        foreach ($shangping_data as $key => $val) {
-                if (in_array($val['initem'], $xm_fenlei) && $val['inmoney'] != 0) {
-                    $temp = array();
-                    $temp['dept_name'] =  $val['dept_name'];
-                    $temp['xmlb'] = $xmlb;
-                    $temp['yijimx_name'] = $val['initem'];
-                    $temp['income'] = $val['inmoney'];
-                    $temp['yw_type_name'] = $yewu_type;
-                    $temp['banshichu'] =($val['initem'] == '本月调入')?$banshichu_1:'';
-                    array_push($result1, $temp);
-                }
+        foreach ($data[1] as $key => $value) {
+            if ($data[1][$key]['outitem'] == '送货支出') {
+                $index2 = $key;
             }
-         $result2 = [];
-        $xm_fenlei_2 = $this->getProjectFenlei($xmlb_zc,$type);
+        }
+        if ($index1 - 1 > 1) {
+            for ($i = 2; $i < $index1; $i++) {
+                array_push($banshichu_1, array('banshichu' => $data[0][$i]['initem'], 'money' => $data[0][$i]['inmoney']));
+            }
+        } else {
+            $banshichu_1 = '';
+        }
+
+        if ($index2 - 1 > 1) {
+            for ($i = 2; $i < $index1; $i++) {
+                array_push($banshichu_2, array('banshichu' => $data[1][$i]['outitem'], 'money' => $data[1][$i]['outmoney']));
+            }
+        } else {
+            $banshichu_2 = '';
+        }
+
+        $xm_fenlei = $this->getProjectFenlei($xmlb, $type);//项目的具体分类
+        foreach ($shangping_data as $key => $val) {
+            if (in_array($val['initem'], $xm_fenlei) && $val['inmoney'] != 0) {
+                $temp = array();
+                $temp['dept_name'] = $val['dept_name'];
+                $temp['xmlb'] = $xmlb;
+                $temp['yijimx_name'] = $val['initem'];
+                $temp['income'] = $val['inmoney'];
+                $temp['yw_type_name'] = $yewu_type;
+                $temp['banshichu'] = ($val['initem'] == '本月调入') ? $banshichu_1 : '';
+                array_push($result1, $temp);
+            }
+        }
+        $result2 = [];
+        $xm_fenlei_2 = $this->getProjectFenlei($xmlb_zc, $type);
 
         foreach ($data[1] as $key => $val) {
             if (in_array($val['outitem'], $xm_fenlei_2) && $val['outmoney'] != 0) {
                 $temp1 = array();
-                $temp1['dept_name'] =  $val['dept_name'];
+                $temp1['dept_name'] = $val['dept_name'];
                 $temp1['xmlb'] = $xmlb_zc;
                 $temp1['yijimx_name'] = $val['outitem'];
                 $temp1['outcome'] = $val['outmoney'];
                 $temp1['yw_type_name'] = $yewu_type;
-                $temp1['banshichu'] =$temp['banshichu'] =($val['initem'] == '本月调出')?$banshichu_2:'';
+                $temp1['banshichu'] = $temp['banshichu'] = ($val['initem'] == '本月调出') ? $banshichu_2 : '';
                 array_push($result2, $temp1);
             }
         }
-        $result = [$result1,$result2];
+        $result = [$result1, $result2];
+
         return $result;
     }
 
     //获取项目分类
-    public function getProjectFenlei($xmlb,$product_type)
+    public function getProjectFenlei($xmlb, $product_type)
     {
         $sql = "select xm_fenlei from certificate_product_xm where xmlb='$xmlb' and type=$product_type";
         $ret = Db::query($sql);
@@ -431,7 +471,7 @@ and yiji_kemu='$yiji_kemu' and erji_kemu='$erji_kemu' and yewu_type='$yewu_type'
     }
 
     //处理商品类无效凭证
-    public function createInvalidPz($token,$sdate, $edate,$type)
+    public function createInvalidPz($token, $sdate, $edate, $type)
     {
         $url = "http://xsrb.wsy.me:801/saleStockSystem/index.php/qt/SPZDZD/search/type/0/token/$token/sdate/$sdate/edate/$edate";
         $arr_data = $this->searchProduct($sdate, $edate, $url);
@@ -440,11 +480,11 @@ and yiji_kemu='$yiji_kemu' and erji_kemu='$erji_kemu' and yewu_type='$yewu_type'
         if (!empty($data)) {
             foreach ($data as $key => $value) {
                 foreach ($data[$key] as $k => $v) {
-                    $sunyi_value =['调价升值' => '升值',
+                    $sunyi_value = ['调价升值' => '升值',
                         '盘点升溢' => '盘盈',
                         '调价降值' => '降值',
                         '盘点短缺' => '盘亏',
-                        '其他业务收入' =>'换货收入'
+                        '其他业务收入' => '换货收入'
                     ];
 
                     $xm_id = Db::table('certificate_product_xm')
@@ -457,147 +497,155 @@ and yiji_kemu='$yiji_kemu' and erji_kemu='$erji_kemu' and yewu_type='$yewu_type'
                         ->where('product_type', 0)
                         ->value('subject_code');
                     //处理错误信息
-                    if(empty($sub_code)){
-                        $this->handleErrPz($data[$key][$k],0);
-                    }else{
-                        $sub_name = Db::table('certificate_subject')
-                            ->where('subject_code', $sub_code)
-                            ->value('subject_name');
-                        $yijikemu = Db::table('certificate_dept')
-                            ->where('dept_third', $data[$key][$k]['banshichu'])
-                            ->value('dept_second');
+                    if (empty($sub_code)) {
+                        $this->handleErrPz($data[$key][$k], 1);
+                        continue;
+                    }
+                    $sub_name = Db::table('certificate_subject')
+                        ->where('subject_code', $sub_code)
+                        ->value('subject_name');
 
-                        $dept_id = Db::table('xsrb_department')
-                            ->field('id')
-                            ->where('dname', $data[$key][$k]['dept_name'])
-                            ->value('id');
+                    //处理多个办事处调入调出
+                    if (is_array($data[$key][$k]['banshichu'])) {
+                        $this->handleBanShiChu($data[$key][$k], $edate, $key, 0);
+                        continue;
+                    }
 
-                        //组合数据
-                        if ($key == 0) {
-                            $zhaiyao = [
-                                '内部往来'=>'本月无效商品调入',
-                                '待处理财产损益'=>'无效商品'.$sunyi_value[$data[$key][$k]['yijimx_name']],
-                                '发出商品' =>  '无效商品送货收回',
-                                '管理费用' =>  '无效商品报废支出',
-                                '库存商品(无效)' =>  '无效商品送货收回',
-                                '库存商品(暂借)' =>'给客户铺货商品',
-                                '其他业务收入' =>'无效商品换货收支',
-                                '应付账款' =>'外购商品入库',
-                                '暂借商品' =>'收客户无效暂存商品',
-                                '主营业务成本' =>'销售成本',
-                            ];
-                            $save_data_1 = [
-                                "dept_id" => $dept_id,
-                                "dname" => $data[$key][$k]['dept_name'],
-                                "type" => 2,
-                                "date" => $edate,
-                                "zongzhang_kemu" => '库存商品无效',
-                                "yiji_kemu" => '',
-                                "erji_kemu" => '',
-                                "qichu_yue" => 0,
-                                "qimo_yue" => 0,
-                                "jiefang" => $data[$key][$k]['income'],
-                                "daifang" => 0,
-                                "zhaiyao" =>$zhaiyao[$sub_name],
-                                "yewu_type" => '数码',
-                                "create_by" => '系统',
-                                "create_time" => date('Y-m-d H:i:s')
-                            ];
-                            $save_data_2 = [
-                                "dept_id" => $dept_id,
-                                "dname" => $data[$key][$k]['dept_name'],
-                                "type" => 2,
-                                "date" => $edate,
-                                "zongzhang_kemu" => $sub_name,
-                                "yiji_kemu" => $yijikemu,
-                                "erji_kemu" => $data[$key][$k]['banshichu'],
-                                "jiefang" => 0,
-                                "daifang" => $data[$key][$k]['income'],
-                                "qichu_yue" => 0,
-                                "qimo_yue" => 0,
-                                "zhaiyao" => $zhaiyao[$sub_name],
-                                "yewu_type" => '数码',
-                                "create_by" => '系统',
-                                "create_time" => date('Y-m-d H:i:s')
-                            ];
+//                    $yijikemu = Db::table('certificate_dept')
+//                        ->where('dept_third', $data[$key][$k]['banshichu'])
+//                        ->value('dept_second');
 
-                            //处理科目代码大于4位
-                            if(strlen($sub_code)>4){
-                                $sub_code_has = substr($sub_code,0,4);
-                                $sub_name_has = Db::table('certificate_subject')
-                                    ->where('subject_code',$sub_code_has)
-                                    ->value('subject_name');
-                                $save_data_2["zongzhang_kemu"] = $sub_name_has;
-                                $save_data_2["yiji_kemu"] =$sub_name;
-                                $save_data_1['zhaiyao'] =$zhaiyao[$sub_name_has];
-                                $save_data_2['zhaiyao'] =$zhaiyao[$sub_name_has];
-                            }
+                    $dept_id = Db::table('xsrb_department')
+                        ->field('id')
+                        ->where('dname', $data[$key][$k]['dept_name'])
+                        ->value('id');
 
-                        } else {
-                            $zhaiyao = [
-                                '内部往来'=>'无效商品调出',
-                                '待处理财产损益'=>'无效商品'.$sunyi_value[$data[$key][$k]['yijimx_name']],
-                                '发出商品' =>  '无效商品送货支出',
-                                '管理费用' =>  '无效商品报废支出',
-                                '库存商品(无效)' => '无效商品送货收回',
-                                '库存商品(暂借)' =>'给客户铺货商品',
-                                '其他业务支出' =>'商品换货收支',
-                                '应付账款' =>'外购商品入库',
-                                '暂借商品' =>'支客户无效暂存商品',
-                                '主营业务成本' =>'销售成本',
-                            ];
-                            $save_data_1 = [
-                                "dept_id" => $dept_id,
-                                "dname" => $data[$key][$k]['dept_name'],
-                                "type" => 2,
-                                "date" => $edate,
-                                "zongzhang_kemu" => '库存商品无效',
-                                "yiji_kemu" => '',
-                                "erji_kemu" => '',
-                                "qichu_yue" => 0,
-                                "qimo_yue" => 0,
-                                "jiefang" => $data[$key][$k]['outcome'],
-                                "daifang" => 0,
-                                "zhaiyao" =>$zhaiyao[$sub_name],
-                                "yewu_type" => '数码',
-                                "create_by" => '系统',
-                                "create_time" => date('Y-m-d H:i:s')
-                            ];
-                            $save_data_2 = [
-                                "dept_id" => $dept_id,
-                                "dname" => $data[$key][$k]['dept_name'],
-                                "type" => 2,
-                                "date" => $edate,
-                                "zongzhang_kemu" => $sub_name,
-                                "yiji_kemu" => $yijikemu,
-                                "erji_kemu" => $data[$key][$k]['banshichu'],
-                                "jiefang" => 0,
-                                "daifang" => $data[$key][$k]['outcome'],
-                                "qichu_yue" => 0,
-                                "qimo_yue" => 0,
-                                "zhaiyao" =>$zhaiyao[$sub_name],
-                                "yewu_type" => '数码',
-                                "create_by" => '系统',
-                                "create_time" => date('Y-m-d H:i:s')
-                            ];
-                            //处理科目代码大于4位
-                            if(strlen($sub_code)>4){
-                                $sub_code_has = substr($sub_code,0,4);
-                                $sub_name_has = Db::table('certificate_subject')
-                                    ->where('subject_code',$sub_code_has)
-                                    ->value('subject_name');
-                                $save_data_2["zongzhang_kemu"] = $sub_name_has;
-                                $save_data_2["yiji_kemu"] =$sub_name;
-                                $save_data_1['zhaiyao'] =$zhaiyao[$sub_name_has];
-                                $save_data_2['zhaiyao'] =$zhaiyao[$sub_name_has];
-                            }
+                    //组合数据
+                    if ($key == 0) {
+                        $zhaiyao = [
+                            '内部往来' => '本月无效商品调入',
+                            '待处理财产损益' => '无效商品' . $sunyi_value[$data[$key][$k]['yijimx_name']],
+                            '发出商品' => '无效商品送货收回',
+                            '管理费用' => '无效商品报废支出',
+                            '库存商品(无效)' => '无效商品送货收回',
+                            '库存商品(暂借)' => '给客户铺货商品',
+                            '其他业务收入' => '无效商品换货收支',
+                            '应付账款' => '外购商品入库',
+                            '暂借商品' => '收客户无效暂存商品',
+                            '主营业务成本' => '销售成本',
+                        ];
+                        $save_data_1 = [
+                            "dept_id" => $dept_id,
+                            "dname" => $data[$key][$k]['dept_name'],
+                            "type" => 2,
+                            "date" => $edate,
+                            "zongzhang_kemu" => '库存商品无效',
+                            "yiji_kemu" => '',
+                            "erji_kemu" => '',
+                            "qichu_yue" => 0,
+                            "qimo_yue" => 0,
+                            "jiefang" => $data[$key][$k]['income'],
+                            "daifang" => 0,
+                            "zhaiyao" => $zhaiyao[$sub_name],
+                            "yewu_type" => '数码',
+                            "create_by" => '系统',
+                            "create_time" => date('Y-m-d H:i:s')
+                        ];
+                        $save_data_2 = [
+                            "dept_id" => $dept_id,
+                            "dname" => $data[$key][$k]['dept_name'],
+                            "type" => 2,
+                            "date" => $edate,
+                            "zongzhang_kemu" => $sub_name,
+                            "yiji_kemu" => $data[$key][$k]['yijimx_name'],
+                            "erji_kemu" => $data[$key][$k]['banshichu'],
+                            "jiefang" => 0,
+                            "daifang" => $data[$key][$k]['income'],
+                            "qichu_yue" => 0,
+                            "qimo_yue" => 0,
+                            "zhaiyao" => $zhaiyao[$sub_name],
+                            "yewu_type" => '数码',
+                            "create_by" => '系统',
+                            "create_time" => date('Y-m-d H:i:s')
+                        ];
+
+                        //处理科目代码大于4位
+                        if (strlen($sub_code) > 4) {
+                            $sub_code_has = substr($sub_code, 0, 4);
+                            $sub_name_has = Db::table('certificate_subject')
+                                ->where('subject_code', $sub_code_has)
+                                ->value('subject_name');
+                            $save_data_2["zongzhang_kemu"] = $sub_name_has;
+                            $save_data_2["yiji_kemu"] = $sub_name;
+                            $save_data_1['zhaiyao'] = $zhaiyao[$sub_name_has];
+                            $save_data_2['zhaiyao'] = $zhaiyao[$sub_name_has];
                         }
-                        Db::table('certificate_list')
-                            ->insert($save_data_1);
-                        Db::table('certificate_list')
-                            ->insert($save_data_2);
+
+                    } else {
+                        $zhaiyao = [
+                            '内部往来' => '无效商品调出',
+                            '待处理财产损益' => '无效商品' . $sunyi_value[$data[$key][$k]['yijimx_name']],
+                            '发出商品' => '无效商品送货支出',
+                            '管理费用' => '无效商品报废支出',
+                            '库存商品(无效)' => '无效商品送货收回',
+                            '库存商品(暂借)' => '给客户铺货商品',
+                            '其他业务支出' => '商品换货收支',
+                            '应付账款' => '外购商品入库',
+                            '暂借商品' => '支客户无效暂存商品',
+                            '主营业务成本' => '销售成本',
+                        ];
+                        $save_data_1 = [
+                            "dept_id" => $dept_id,
+                            "dname" => $data[$key][$k]['dept_name'],
+                            "type" => 2,
+                            "date" => $edate,
+                            "zongzhang_kemu" => '库存商品无效',
+                            "yiji_kemu" => '',
+                            "erji_kemu" => '',
+                            "qichu_yue" => 0,
+                            "qimo_yue" => 0,
+                            "jiefang" => $data[$key][$k]['outcome'],
+                            "daifang" => 0,
+                            "zhaiyao" => $zhaiyao[$sub_name],
+                            "yewu_type" => '数码',
+                            "create_by" => '系统',
+                            "create_time" => date('Y-m-d H:i:s')
+                        ];
+                        $save_data_2 = [
+                            "dept_id" => $dept_id,
+                            "dname" => $data[$key][$k]['dept_name'],
+                            "type" => 2,
+                            "date" => $edate,
+                            "zongzhang_kemu" => $sub_name,
+                            "yiji_kemu" => $data[$key][$k]['yijimx_name'],
+                            "erji_kemu" => $data[$key][$k]['banshichu'],
+                            "jiefang" => 0,
+                            "daifang" => $data[$key][$k]['outcome'],
+                            "qichu_yue" => 0,
+                            "qimo_yue" => 0,
+                            "zhaiyao" => $zhaiyao[$sub_name],
+                            "yewu_type" => '数码',
+                            "create_by" => '系统',
+                            "create_time" => date('Y-m-d H:i:s')
+                        ];
+                        //处理科目代码大于4位
+                        if (strlen($sub_code) > 4) {
+                            $sub_code_has = substr($sub_code, 0, 4);
+                            $sub_name_has = Db::table('certificate_subject')
+                                ->where('subject_code', $sub_code_has)
+                                ->value('subject_name');
+                            $save_data_2["zongzhang_kemu"] = $sub_name_has;
+                            $save_data_2["yiji_kemu"] = $sub_name;
+                            $save_data_1['zhaiyao'] = $zhaiyao[$sub_name_has];
+                            $save_data_2['zhaiyao'] = $zhaiyao[$sub_name_has];
+                        }
                     }
-                    }
+                    Db::table('certificate_list')
+                        ->insert($save_data_1);
+                    Db::table('certificate_list')
+                        ->insert($save_data_2);
+                }
+
             }
             return 1;
         }
@@ -606,27 +654,412 @@ and yiji_kemu='$yiji_kemu' and erji_kemu='$erji_kemu' and yewu_type='$yewu_type'
     // --------------------------------商品类凭证 end-------------------------------------------
 
     //--------------处理商品类凭证错误的信息start--------------
-    public function handleErrPz($data,$type){
-
-       $dept_id = Db::table('xsrb_department')
-           ->where('dname',$data['dept_name'])
-           ->value('id');
-       $add_data = [
-           'type' => 2,
-           'dept_id' => $dept_id,
-           'dname' => $data['dept_name'],
-           'xmlb' =>   $data['xmlb'],
-           'yijimx_name' => $data['yijimx_name'],
-           'erjimx_name' => '',
-           'yw_type_name' => $data['yw_type_name'],
-           'income' => $data['income'],
-           'spending' => $data['outcome'],
-           'remark' => $data['xmlb'].'和'. $data['yijimx_name'].'未匹配到相应科目信息',
-           'date' => date('Y-m-d',time()),
-           'balance' => ''
-       ];
-       Db::table('certificate_error_log')
+    public function handleErrPz($data, $type)
+    {
+        $yewu_type = $type == 1 ? '数码' : '防盗门';
+        $dept_id = Db::table('xsrb_department')
+            ->where('dname', $data['dept_name'])
+            ->value('id');
+        $add_data = [
+            'type' => 2,
+            'dept_id' => $dept_id,
+            'dname' => $data['dept_name'],
+            'xmlb' => $data['xmlb'],
+            'yijimx_name' => $data['yijimx_name'],
+            'erjimx_name' => '',
+            'yw_type_name' => $data['yw_type_name'],
+            'income' => $data['income'],
+            'spending' => $data['outcome'],
+            'remark' => $data['xmlb'] . '和' . $data['yijimx_name'] . '未匹配到相应科目信息',
+            'date' => date('Y-m-d', time()),
+            'balance' => '',
+            'yw_type' => $yewu_type
+        ];
+        Db::table('certificate_error_log')
             ->insert($add_data);
     }
     //--------------处理商品类凭证错误的信息end----------------
+    //门和门配的凭证
+    public function doorInvalidPz($token, $sdate, $edate)
+    {
+
+        if (!empty($res)) {
+            return retmsg(0);
+        }
+        return retmsg(-1);
+    }
+
+    public function doorPingZheng($token, $sdate, $edate, $url = '')
+    {
+        $url = empty($url) ? "http://xsrb.wsy.me:801/saleStockSystem/index.php/admin/SPZDZD/search/type/1/sdate/$sdate/edate/$edate/token/$token" : $url;
+        $arr_data = $this->getDoorData($url);
+        return $arr_data;
+    }
+
+    public function getDoorData($url)
+    {
+        $data = json_decode(curl_get($url, 10), true);
+        $list = $data['data'];
+        $head_name = $list[1]['tr'][0]['value'];
+        $head_name = substr($head_name, strpos($head_name, ":") + 1);
+        $in_items = [];
+        $out_items = [];
+        for ($i = 3; $i < count($list); $i++) {
+            foreach ($list[$i]['tr'] as $key => $value) {
+                if ($key == 0 || $key == 1) {
+                    $in_items[$i - 3] = [
+                        "dept_name" => $head_name,
+                        "initem" => $list[$i]['tr'][0]['value'],
+                        "inmoney" => $list[$i]['tr'][1]['value']
+                    ];
+                } elseif ($key == 4 || $key == 3) {
+                    $out_items[$i - 3] = [
+                        "dept_name" => $head_name,
+                        "outitem" => $list[$i]['tr'][3]['value'],
+                        "outmoney" => $list[$i]['tr'][4]['value']
+                    ];
+                }
+
+            }
+        }
+        $handleData = [$in_items, $out_items];
+        return $handleData;
+    }
+
+    public function createDoorPingZheng($data, $edate, $type)
+    {
+        $sunyi_value = ['调价升值' => '升值',
+            '盘点升溢' => '盘盈',
+            '调价降值' => '降值',
+            '盘点短缺' => '盘亏',
+            '其他业务支出' => '换货支出'
+        ];
+
+        foreach ($data as $key => $value) {
+            foreach ($data[$key] as $k => $v) {
+                $xm_id = Db::table('certificate_product_xm')
+                    ->where('xmlb', $data[$key][$k]['xmlb'])
+                    ->where('xm_fenlei', $data[$key][$k]['yijimx_name'])
+                    ->value('id');
+                $sub_code = Db::table('certificate_relation')
+                    ->where('xm_id', $xm_id)
+                    ->where('type', 2)
+                    ->where('product_type', $type)
+                    ->value('subject_code');
+                //处理错误信息
+                if (empty($sub_code)) {
+                    $this->handleErrPz($data[$key][$k], 2);
+                    continue;
+                }
+                //  处理产生凭证
+                $sub_name = Db::table('certificate_subject')
+                    ->where('subject_code', $sub_code)
+                    ->value('subject_name');
+                //处理多个办事处调入调出
+                if (is_array($data[$key][$k]['banshichu'])) {
+                    $this->handleBanShiChu($data[$key][$k], $edate, $key, $type);
+                    continue;
+                }
+//                $yijikemu = Db::table('certificate_dept')
+//                    ->where('dept_third', $data[$key][$k]['banshichu'])
+//                    ->value('dept_second');
+
+                $dept_id = Db::table('xsrb_department')
+                    ->field('id')
+                    ->where('dname', $data[$key][$k]['dept_name'])
+                    ->value('id');
+
+                //组合数据
+                if ($key == 0) {   //调入
+                    $zhaiyao = $type == 1 ? [
+                        '内部往来' => '其他部门调入',
+                        '待处理财产损益' => '有效商品' . $sunyi_value[$data[$key][$k]['yijimx_name']],
+                        '发出商品' => '本月送货支出',
+                        '管理费用' => '本月商品报废支出',
+                        '库存商品(有效)' => '',
+                        '库存商品(暂借)' => '给客户铺货商品',
+                        '其他业务支出' => '商品换货收支',
+                        '应付账款' => '外购商品入库',
+                        '暂借商品' => '收客户暂存商品',
+                        '主营业务成本' => '销售成本',
+                        '其他业务支出' => '商品换货收支',
+                        '管理费用' => '本月报废商品支出',
+                    ] : [
+                        '内部往来' => '本月无效商品调入',
+                        '待处理财产损益' => '无效商品' . $sunyi_value[$data[$key][$k]['yijimx_name']],
+                        '发出商品' => '无效商品送货收回',
+                        '管理费用' => '无效商品报废支出',
+                        '库存商品(无效)' => '无效商品送货收回',
+                        '库存商品(暂借)' => '给客户铺货商品',
+                        '其他业务收入' => '无效商品换货收支',
+                        '应付账款' => '外购商品入库',
+                        '暂借商品' => '收客户无效暂存商品',
+                        '主营业务成本' => '销售成本',
+                    ];
+
+                    $save_data_1 = $type == 1 ? [
+                        "dept_id" => $dept_id,
+                        "dname" => $data[$key][$k]['dept_name'],
+                        "type" => 2,
+                        "date" => $edate,
+                        "zongzhang_kemu" => '库存商品有效',
+                        "yiji_kemu" => '',
+                        "erji_kemu" => '',
+                        "qichu_yue" => 0,
+                        "qimo_yue" => 0,
+                        "jiefang" => $data[$key][$k]['income'],
+                        "daifang" => 0,
+                        "zhaiyao" => $zhaiyao[$sub_name],
+                        "yewu_type" => '防盗门',
+                        "create_by" => '系统',
+                        "create_time" => date('Y-m-d H:i:s')
+                    ] : [
+                        "dept_id" => $dept_id,
+                        "dname" => $data[$key][$k]['dept_name'],
+                        "type" => 2,
+                        "date" => $edate,
+                        "zongzhang_kemu" => '库存商品无效',
+                        "yiji_kemu" => '',
+                        "erji_kemu" => '',
+                        "qichu_yue" => 0,
+                        "qimo_yue" => 0,
+                        "jiefang" => $data[$key][$k]['income'],
+                        "daifang" => 0,
+                        "zhaiyao" => $zhaiyao[$sub_name],
+                        "yewu_type" => '防盗门',
+                        "create_by" => '系统',
+                        "create_time" => date('Y-m-d H:i:s')
+                    ];
+
+                    $save_data_2 = [
+                        "dept_id" => $dept_id,
+                        "dname" => $data[$key][$k]['dept_name'],
+                        "type" => 2,
+                        "date" => $edate,
+                        "zongzhang_kemu" => $sub_name,
+                        "yiji_kemu" => $data[$key][$k]['yijimx_name'],
+                        "erji_kemu" => $data[$key][$k]['banshichu'],
+                        "jiefang" => 0,
+                        "daifang" => $data[$key][$k]['income'],
+                        "qichu_yue" => 0,
+                        "qimo_yue" => 0,
+                        "zhaiyao" => $zhaiyao[$sub_name],
+                        "yewu_type" => '防盗门',
+                        "create_by" => '系统',
+                        "create_time" => date('Y-m-d H:i:s')
+                    ];
+                    //处理科目代码大于4位
+                    if (strlen($sub_code) > 4) {
+                        $sub_code_has = substr($sub_code, 0, 4);
+                        $sub_name_has = Db::table('certificate_subject')
+                            ->where('subject_code', $sub_code_has)
+                            ->value('subject_name');
+                        $save_data_2["zongzhang_kemu"] = $sub_name_has;
+                        $save_data_2["yiji_kemu"] = $sub_name;
+                        $save_data_1['zhaiyao'] = $zhaiyao[$sub_name_has];
+                        $save_data_2['zhaiyao'] = $zhaiyao[$sub_name_has];
+                    }
+                } else {  //处理商品支出
+                    $zhaiyao = $type == 1 ? [
+                        '内部往来' => '有效商品调出',
+                        '待处理财产损益' => '有效商品' . $sunyi_value[$data[$key][$k]['yijimx_name']],
+                        '发出商品' => '有效商品送货支出',
+                        '管理费用' => '有效商品报废支出',
+                        '库存商品(无效)' => '有效商品送货收回',
+                        '库存商品(暂借)' => '给客户铺货商品',
+                        '其他业务支出' => '商品换货收支',
+                        '应付账款' => '外购商品入库',
+                        '暂借商品' => '支客户无效暂存商品',
+                        '主营业务成本' => '销售成本',
+                    ] : [
+                        '内部往来' => '无效商品调出',
+                        '待处理财产损益' => '无效商品' . $sunyi_value[$data[$key][$k]['yijimx_name']],
+                        '发出商品' => '无效商品送货支出',
+                        '管理费用' => '无效商品报废支出',
+                        '库存商品(无效)' => '无效商品送货收回',
+                        '库存商品(暂借)' => '给客户铺货商品',
+                        '其他业务支出' => '商品换货收支',
+                        '应付账款' => '外购商品入库',
+                        '暂借商品' => '支客户无效暂存商品',
+                        '主营业务成本' => '销售成本',
+                    ];
+                    $save_data_1 = ($type == 1) ? [
+                        "dept_id" => $dept_id,
+                        "dname" => $data[$key][$k]['dept_name'],
+                        "type" => 2,
+                        "date" => $edate,
+                        "zongzhang_kemu" => '库存商品有效',
+                        "yiji_kemu" => '',
+                        "erji_kemu" => '',
+                        "qichu_yue" => 0,
+                        "qimo_yue" => 0,
+                        "jiefang" => $data[$key][$k]['outcome'],
+                        "daifang" => 0,
+                        "zhaiyao" => $zhaiyao[$sub_name],
+                        "yewu_type" => '防盗门',
+                        "create_by" => '系统',
+                        "create_time" => date('Y-m-d H:i:s')
+                    ] : [
+                        "dept_id" => $dept_id,
+                        "dname" => $data[$key][$k]['dept_name'],
+                        "type" => 2,
+                        "date" => $edate,
+                        "zongzhang_kemu" => '库存商品无效',
+                        "yiji_kemu" => '',
+                        "erji_kemu" => '',
+                        "qichu_yue" => 0,
+                        "qimo_yue" => 0,
+                        "jiefang" => $data[$key][$k]['outcome'],
+                        "daifang" => 0,
+                        "zhaiyao" => $zhaiyao[$sub_name],
+                        "yewu_type" => '防盗门',
+                        "create_by" => '系统',
+                        "create_time" => date('Y-m-d H:i:s')
+                    ];
+                    $save_data_2 = [
+                        "dept_id" => $dept_id,
+                        "dname" => $data[$key][$k]['dept_name'],
+                        "type" => 2,
+                        "date" => $edate,
+                        "zongzhang_kemu" => $sub_name,
+                        "yiji_kemu" => $data[$key][$k]['yijimx_name'],
+                        "erji_kemu" => $data[$key][$k]['banshichu'],
+                        "jiefang" => 0,
+                        "daifang" => $data[$key][$k]['outcome'],
+                        "qichu_yue" => 0,
+                        "qimo_yue" => 0,
+                        "zhaiyao" => $zhaiyao[$sub_name],
+                        "yewu_type" => '防盗门',
+                        "create_by" => '系统',
+                        "create_time" => date('Y-m-d H:i:s')
+                    ];
+
+                    //处理科目代码大于4位
+                    if (strlen($sub_code) > 4) {
+                        $sub_code_has = substr($sub_code, 0, 4);
+                        $sub_name_has = Db::table('certificate_subject')
+                            ->where('subject_code', $sub_code_has)
+                            ->value('subject_name');
+                        $save_data_2["zongzhang_kemu"] = $sub_name_has;
+                        $save_data_2["yiji_kemu"] = $sub_name;
+                        $save_data_1['zhaiyao'] = $zhaiyao[$sub_name_has];
+                        $save_data_2['zhaiyao'] = $zhaiyao[$sub_name_has];
+
+                    }
+                }
+                Db::table('certificate_list')
+                    ->insert($save_data_1);
+                Db::table('certificate_list')
+                    ->insert($save_data_2);
+            }
+        }
+        return 1;
+    }
+
+    public function handleBanShiChu($data, $edate, $key, $type)
+    {
+
+        $jiefang = $key == 0 ? $data['income'] : $data['outcome'];
+        $xm_id = Db::table('certificate_product_xm')
+            ->where('xmlb', $data['xmlb'])
+            ->where('xm_fenlei', $data['yijimx_name'])
+            ->value('id');
+        $sub_code = Db::table('certificate_relation')
+            ->where('xm_id', $xm_id)
+            ->where('type', 2)
+            ->where('product_type', $type)
+            ->value('subject_code');
+
+        $sub_name = Db::table('certificate_subject')
+            ->where('subject_code', $sub_code)
+            ->value('subject_name');
+        $dept_id = Db::table('xsrb_department')
+            ->field('id')
+            ->where('dname', $data['dept_name'])
+            ->value('id');
+
+        if ($type == 1 && $key == 0) {
+            $zhaiyao = '其他部门调入';
+        }
+        if ($type == 1 && $key == 1) {
+            $zhaiyao = '其他部门调出';
+        }
+        if ($type == 0 && $key == 0) {
+            $zhaiyao = '本月无效商品调入';
+        }
+        if ($type == 0 && $key == 1) {
+            $zhaiyao = '本月无效商品调出';
+        }
+
+        $zongzhang_kemu = $type == 1 ? '库存商品有效' : '库存商品无效';
+        $save_data_1 = [
+            "dept_id" => $dept_id,
+            "dname" => $data['dept_name'],
+            "type" => 2,
+            "date" => $edate,
+            "zongzhang_kemu" => $zongzhang_kemu,
+            "yiji_kemu" => '',
+            "erji_kemu" => '',
+            "qichu_yue" => 0,
+            "qimo_yue" => 0,
+            "jiefang" => $jiefang,
+            "daifang" => 0,
+            "zhaiyao" => $zhaiyao,
+            "yewu_type" => '防盗门',
+            "create_by" => '系统',
+            "create_time" => date('Y-m-d H:i:s')
+        ];
+//        先插入一条,再遍历办事处,接着插入
+        Db::table('certificate_list')
+            ->insert($save_data_1);
+
+        if (empty($data['banshichu'])) {
+            $save_data = ['zongzhang_kemu' => $sub_name,
+                'yiji_kemu' => '',
+                'erji_kemu' => '',
+                "dept_id" => $dept_id,
+                "dname" => $data['dept_name'],
+                "type" => 2,
+                "date" => $edate,
+                "qichu_yue" => 0,
+                "qimo_yue" => 0,
+                "jiefang" => 0,
+                "daifang" => $jiefang,
+                "zhaiyao" => $zhaiyao,
+                "yewu_type" => '防盗门',
+                "create_by" => '系统',
+                "create_time" => date('Y-m-d H:i:s')
+            ];
+            Db::table('certificate_list')
+                ->insert($save_data);
+            return;
+        }
+        foreach ($data['banshichu'] as $kk => $val) {
+            if ($data['banshichu'][$kk]['banshichu'] == '' && $data['banshichu'][$kk]['money'] == 0) {
+                continue;
+            }
+            $yijikemu = Db::table('certificate_dept')
+                ->where('dept_third', $data['banshichu'][$kk]['banshichu'])
+                ->value('dept_second');
+            $save_data = ['zongzhang_kemu' => $sub_name,
+                'yiji_kemu' => $yijikemu,
+                'erji_kemu' => $data['banshichu'][$kk]['banshichu'],
+                "dept_id" => $dept_id,
+                "dname" => $data['dept_name'],
+                "type" => 2,
+                "date" => $edate,
+                "qichu_yue" => 0,
+                "qimo_yue" => 0,
+                "jiefang" => 0,
+                "daifang" => $data['banshichu'][$kk]['money'],
+                "zhaiyao" => $zhaiyao,
+                "yewu_type" => '防盗门',
+                "create_by" => '系统',
+                "create_time" => date('Y-m-d H:i:s')
+            ];
+            Db::table('certificate_list')
+                ->insert($save_data);
+        }
+
+    }
 }
